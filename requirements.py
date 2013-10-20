@@ -12,6 +12,8 @@ gunicorn==18.0
 ipdb==0.8
 ipython==1.1.0
 itsdangerous==0.23
+pyzmq==13.1.0
 requests==2.0.0
 tornado==3.1.1
+ws4py==0.3.2
 wsgiref==0.1.2
