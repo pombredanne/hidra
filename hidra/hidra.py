@@ -4,30 +4,22 @@ import requests
 from flask import Flask
 from flask import request
 from flask import Response
-from flask import url_for
 
-from flask_sockets import Sockets
+from ws4py.client.geventclient import WebSocketClient
+
+from sockets import websocket
 
 app = Flask(__name__)
 app.debug = True
-sockets = Sockets(app)
 
 PROXY_DOMAIN = "127.0.0.1:8888"
 PROXY_FORMAT = u"http://%s/%s" % (PROXY_DOMAIN, u"%s")
 PROXY_REWRITE_REGEX = re.compile(
-    r'((?:src|action|[^_]href|project-url|baseurl)'
+    r'((?:src|action|[^_]href|project-url|kernel-url|baseurl)'
     '\s*[=:]\s*["\']?)/',
     re.IGNORECASE
 )
-
-
-@sockets.route('/kernels/<str:notebook>/<str:action>', endpoint="websocket")
-def websocket(ws, notebook, action):
-    url = url_for("websocket", notebook, action)
-    app.logger.debug(url)
-    while True:
-        message = ws.receive()
-        ws.send(message)
+websockets = {}
 
 
 @app.route('/proxy/', defaults={'url': ''}, methods=[
@@ -36,10 +28,20 @@ def websocket(ws, notebook, action):
 @app.route('/proxy/<path:url>', methods=[
     "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"
 ])
-@app.route('/kernels', defaults={'url': 'kernels'}, methods=[
-    "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"
-])
 def proxy(url):
+    if websocket:
+        data = websocket.receive()
+        websocket_url = 'ws://{}/{}'.format(PROXY_DOMAIN, url)
+        if websocket_url in websockets:
+            client = websockets[websocket_url]
+        else:
+            client = WebSocketClient(websocket_url,
+                                     protocols=['http-only', 'chat'])
+            websockets[websocket_url] = client
+        client.connect()
+        client.send(data)
+        client_data = client.receive()
+        websocket.send(client_data)
     if request.method == "GET":
         url_ending = "%s?%s" % (url, request.query_string)
         url = PROXY_FORMAT % url_ending
